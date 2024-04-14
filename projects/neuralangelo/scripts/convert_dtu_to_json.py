@@ -17,7 +17,6 @@ import os
 import cv2
 from PIL import Image, ImageFile
 from glob import glob
-import math
 import sys
 from pathlib import Path
 
@@ -64,18 +63,19 @@ def dtu_to_json(args):
             continue
 
         out = {
-            "k1": 0.0,  # take undistorted images only
-            "k2": 0.0,
-            "k3": 0.0,
-            "k4": 0.0,
-            "p1": 0.0,
-            "p2": 0.0,
+            # "k1": 0.0,  # take undistorted images only
+            # "k2": 0.0,
+            # "k3": 0.0,
+            # "k4": 0.0,
+            # "p1": 0.0,
+            # "p2": 0.0,
             "is_fisheye": False,
             "frames": []
         }
 
         camera_param = dict(np.load(os.path.join(scene_path, 'cameras_sphere.npz')))
         images_lis = sorted(glob(os.path.join(scene_path, 'image/*.png')))
+        w, h = Image.open(os.path.join(scene_path, 'image', images_lis[0])).size
         for idx, image in enumerate(images_lis):
             image = os.path.basename(image)
 
@@ -88,33 +88,26 @@ def dtu_to_json(args):
             intrinsic_param, c2w = load_K_Rt_from_P(None, P)
             c2w_gl = _cv_to_gl(c2w)
 
-            frame = {"file_path": 'image/' + image, "transform_matrix": c2w_gl.tolist()}
+            frame = {"file_path": 'image/' + image, "transform_matrix": c2w_gl.tolist(),
+                     "intrinsic_matrix": intrinsic_param.tolist(), "w": w, "h": h}
             out["frames"].append(frame)
 
-        fl_x = intrinsic_param[0][0]
-        fl_y = intrinsic_param[1][1]
-        cx = intrinsic_param[0][2]
-        cy = intrinsic_param[1][2]
-        sk_x = intrinsic_param[0][1]
-        sk_y = intrinsic_param[1][0]
-        w, h = Image.open(os.path.join(scene_path, 'image', image)).size
-
-        angle_x = math.atan(w / (fl_x * 2)) * 2
-        angle_y = math.atan(h / (fl_y * 2)) * 2
+        # angle_x = math.atan(w / (fl_x * 2)) * 2
+        # angle_y = math.atan(h / (fl_y * 2)) * 2
 
         scale_mat = scale_mat.astype(float)
 
         out.update({
-            "camera_angle_x": angle_x,
-            "camera_angle_y": angle_y,
-            "fl_x": fl_x,
-            "fl_y": fl_y,
-            "cx": cx,
-            "cy": cy,
-            "sk_x": sk_x,
-            "sk_y": sk_y,
-            "w": int(w),
-            "h": int(h),
+            # "camera_angle_x": angle_x,
+            # "camera_angle_y": angle_y,
+            # "fl_x": fl_x,
+            # "fl_y": fl_y,
+            # "cx": cx,
+            # "cy": cy,
+            # "sk_x": sk_x,
+            # "sk_y": sk_y,
+            # "w": int(w),
+            # "h": int(h),
             "aabb_scale": np.exp2(np.rint(np.log2(scale_mat[0, 0]))),  # power of two, for INGP resolution computation
             "sphere_center": [0., 0., 0.],
             "sphere_radius": 1.,

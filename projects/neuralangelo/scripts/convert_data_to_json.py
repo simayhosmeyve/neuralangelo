@@ -16,7 +16,6 @@ import os
 import sys
 from pathlib import Path
 import json
-import math
 
 dir_path = Path(os.path.dirname(os.path.realpath(__file__))).parents[2]
 sys.path.append(dir_path.__str__())
@@ -131,37 +130,27 @@ def _cv_to_gl(cv):
 
 
 def export_to_json(cameras, images, bounding_box, center, radius, file_path):
-    intrinsic_param = np.array([camera.params for camera in cameras.values()])
-    fl_x = intrinsic_param[0][0]  # TODO: only supports single camera for now
-    fl_y = intrinsic_param[0][1]
-    cx = intrinsic_param[0][2]
-    cy = intrinsic_param[0][3]
-    image_width = np.array([camera.width for camera in cameras.values()])
-    image_height = np.array([camera.height for camera in cameras.values()])
-    w = image_width[0]
-    h = image_height[0]
-
-    angle_x = math.atan(w / (fl_x * 2)) * 2
-    angle_y = math.atan(h / (fl_y * 2)) * 2
+    # angle_x = math.atan(w / (fl_x * 2)) * 2
+    # angle_y = math.atan(h / (fl_y * 2)) * 2
 
     out = {
-        "camera_angle_x": angle_x,
-        "camera_angle_y": angle_y,
-        "fl_x": fl_x,
-        "fl_y": fl_y,
-        "sk_x": 0.0,  # TODO: check if colmap has skew
-        "sk_y": 0.0,
-        "k1": 0.0,  # take undistorted images only
-        "k2": 0.0,
-        "k3": 0.0,
-        "k4": 0.0,
-        "p1": 0.0,
-        "p2": 0.0,
+        # "camera_angle_x": angle_x,
+        # "camera_angle_y": angle_y,
+        # "fl_x": fl_x,
+        # "fl_y": fl_y,
+        # "sk_x": 0.0,
+        # "sk_y": 0.0,
+        # "k1": 0.0,  # take undistorted images only
+        # "k2": 0.0,
+        # "k3": 0.0,
+        # "k4": 0.0,
+        # "p1": 0.0,
+        # "p2": 0.0,
         "is_fisheye": False,  # TODO: not supporting fish eye camera
-        "cx": cx,
-        "cy": cy,
-        "w": int(w),
-        "h": int(h),
+        # "cx": cx,
+        # "cy": cy,
+        # "w": int(w),
+        # "h": int(h),
         "aabb_scale": np.exp2(np.rint(np.log2(radius))),  # power of two, for INGP resolution computation
         "aabb_range": bounding_box,
         "sphere_center": center,
@@ -171,6 +160,19 @@ def export_to_json(cameras, images, bounding_box, center, radius, file_path):
 
     # read poses
     for img in sorted(images.values()):
+        camera = cameras[img.camera_id]
+        fl_x = camera.params[0]  # NOTE: only supports pinhole camera
+        fl_y = camera.params[1]
+        cx = camera.params[2]
+        cy = camera.params[3]
+        sk_x = 0  # TODO: check if colmap has skew
+        sk_y = 0
+        intrinsic = np.array([
+            [fl_x, sk_x, cx],
+            [sk_y, fl_y, cy],
+            [0, 0, 1]
+        ])
+
         rotation = qvec2rotmat(img.qvec)
         translation = img.tvec.reshape(3, 1)
         w2c = np.concatenate([rotation, translation], 1)
@@ -178,7 +180,9 @@ def export_to_json(cameras, images, bounding_box, center, radius, file_path):
         c2w = np.linalg.inv(w2c)
         c2w = _cv_to_gl(c2w)  # convert to GL convention used in iNGP
 
-        frame = {"file_path": "images/" + img.name, "transform_matrix": c2w.tolist()}
+        frame = {"file_path": "images/" + img.name,
+                 "transform_matrix": c2w.tolist(), "intrinsic_matrix": intrinsic.tolist(),
+                 "w": camera.width, "h": camera.height}
         out["frames"].append(frame)
 
     with open(file_path, "w") as outputfile:

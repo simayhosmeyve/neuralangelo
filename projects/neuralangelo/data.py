@@ -38,6 +38,11 @@ class Dataset(base.Dataset):
             subset = cfg_data[self.split].subset
             subset_idx = np.linspace(0, len(self.list), subset+1)[:-1].astype(int)
             self.list = [self.list[i] for i in subset_idx]
+            H_list = [frame['h'] for frame in self.list]
+            W_list = [frame['w'] for frame in self.list]
+        if self.split == 'val':
+            dataset_same_size = len(np.unique(H_list)) == 1 and len(np.unique(W_list))
+            assert dataset_same_size, "Can only inference on images of same size. To fix this, set subset=1."
         self.num_rays = cfg.model.render.rand_rays
         self.readjust = getattr(cfg_data, "readjust", None)
         # Preload dataset if possible.
@@ -61,13 +66,15 @@ class Dataset(base.Dataset):
         sample = dict(idx=idx)
         # Get the images.
         image, image_size_raw = self.images[idx] if self.preload else self.get_image(idx)
-        image = self.preprocess_image(image)
+        image = self.preprocess_image(image, image_size_raw)
+        H, W = image.shape[-2], image.shape[-1]
         # Get the cameras (intrinsics and pose).
         intr, pose = self.cameras[idx] if self.preload else self.get_camera(idx)
         intr, pose = self.preprocess_camera(intr, pose, image_size_raw)
         # Pre-sample ray indices.
         if self.split == "train":
-            ray_idx = torch.randperm(self.H * self.W)[:self.num_rays]  # [R]
+            assert H * W >= self.num_rays, f"Image size {H}x{W}, which is smaller than # of rays ({self.num_rays})"
+            ray_idx = torch.randperm(H * W)[:self.num_rays]  # [R]
             image_sampled = image.flatten(1, 2)[:, ray_idx].t()  # [R,3]
             sample.update(
                 ray_idx=ray_idx,
@@ -91,18 +98,43 @@ class Dataset(base.Dataset):
         image_size_raw = image.size
         return image, image_size_raw
 
-    def preprocess_image(self, image):
+    def preprocess_image(self, image, image_size_raw):
+        """Resize image and convert to tensor.
+
+        Args:
+            image (PIL.Image)
+            image_size_raw (tuple[int, int]): tuple of width and height
+
+        Returns:
+            torch.tensor: RGB image of shape 3xHxW
+        """
+        resize_ratio = self.compute_resize_ratio(image_size_raw)
+        raw_W, raw_H = image_size_raw
+        target_W = int(raw_W * resize_ratio)
+        target_H = int(raw_H * resize_ratio)
         # Resize the image.
-        image = image.resize((self.W, self.H))
+        image = image.resize((target_W, target_H))
         image = torchvision_F.to_tensor(image)
         rgb = image[:3]
         return rgb
 
+    def compute_resize_ratio(self, image_size_raw):
+        """Compute resize ratio. If aspect ratio is not the same as specified,
+        resize along the longest axis.
+
+        Args:
+            image_size_raw (tuple[int, int]): tuple of width and height
+
+        Returns:
+            float: resize ratio
+        """
+        raw_W, raw_H = image_size_raw
+        resize_ratio = min(self.W / raw_W, self.H / raw_H)
+        return resize_ratio
+
     def get_camera(self, idx):
         # Camera intrinsics.
-        intr = torch.tensor([[self.meta["fl_x"], self.meta["sk_x"], self.meta["cx"]],
-                             [self.meta["sk_y"], self.meta["fl_y"], self.meta["cy"]],
-                             [0, 0, 1]]).float()
+        intr = torch.tensor(self.list[idx]["intrinsic_matrix"], dtype=torch.float32)
         # Camera pose.
         c2w_gl = torch.tensor(self.list[idx]["transform_matrix"], dtype=torch.float32)
         c2w = self._gl_to_cv(c2w_gl)
@@ -118,11 +150,13 @@ class Dataset(base.Dataset):
         return intr, w2c
 
     def preprocess_camera(self, intr, pose, image_size_raw):
+        resize_ratio = self.compute_resize_ratio(image_size_raw)
         # Adjust the intrinsics according to the resized image.
         intr = intr.clone()
-        raw_W, raw_H = image_size_raw
-        intr[0] *= self.W / raw_W
-        intr[1] *= self.H / raw_H
+        intr[0, 0] *= resize_ratio  # fx
+        intr[0, -1] *= resize_ratio  # cx
+        intr[1, 1] *= resize_ratio  # fy
+        intr[1, -1] *= resize_ratio  # cy
         return intr, pose
 
     def _gl_to_cv(self, gl):

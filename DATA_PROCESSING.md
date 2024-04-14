@@ -50,9 +50,10 @@ To preprocess your data, you can choose to either
 
         ```bash
         DATA_PATH=datasets/${SEQUENCE}_ds${DOWNSAMPLE_RATE}
-        bash projects/neuralangelo/scripts/run_colmap.sh ${DATA_PATH}
+        bash projects/neuralangelo/scripts/run_colmap.sh ${DATA_PATH} [Optional: ${SINGLE_CAM}]
         ```
         `DATA_PATH`: path to processed data.
+        `SINGLE_CAM`: default `true`. Setting to `false` if the scene is captured with multiple cameras.
 
         After COLMAP finishes, the folder structure will look like following:
         ```
