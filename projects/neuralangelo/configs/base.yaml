@@ -10,11 +10,11 @@
 
 logging_iter: 9999999999999  # disable the printing logger
 
-max_iter: 500000
+max_iter: 5000
 
-wandb_scalar_iter: 100
-wandb_image_iter: 10000
-validation_iter: 5000
+wandb_scalar_iter: 1
+wandb_image_iter: 100
+validation_iter: 50
 speed_benchmark: False
 
 checkpoint:
@@ -62,7 +62,7 @@ model:
                 coarse2fine:
                     enabled: True
                     init_active_level: 4
-                    step: 5000
+                    step: 50
             gradient:
                 mode: numerical
                 taps: 4
@@ -122,7 +122,7 @@ optim:
     sched:
         iteration_mode: True
         type: two_steps_with_warmup
-        warm_up_end: 5000
+        warm_up_end: 50
         two_steps: [300000,400000]
         gamma: 10.0
 

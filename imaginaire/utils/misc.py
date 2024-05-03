@@ -13,7 +13,6 @@ license agreement from NVIDIA CORPORATION is strictly prohibited.
 import collections
 import functools
 import os
-import signal
 import time
 from collections import OrderedDict
 
@@ -297,9 +296,6 @@ class Timer(object):
         self.cfg = cfg
         self.time_iteration = 0
         self.time_epoch = 0
-        if is_master():
-            # noinspection PyTypeChecker
-            signal.signal(signal.SIGALRM, functools.partial(alarm_handler, self.cfg.timeout_period))
 
     def reset(self):
         self.accu_forw_iter_time = 0
@@ -370,7 +366,3 @@ class Timer(object):
     def checkpoint_toc(self):
         # return time by minutes
         return (time.time() - self.checkpoint_start_time) / 60
-
-    @master_only
-    def reset_timeout_counter(self):
-        signal.alarm(self.cfg.timeout_period)
